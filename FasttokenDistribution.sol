@@ -19,7 +19,7 @@ contract FasttokenDistribution is AccessControl {
 
     /// Constant private member variables
     uint256 private constant MONTH = 30 days;
-    uint256 private constant YEAR = 365 days;
+    uint256 private constant YEAR = 12 * MONTH;
     uint256 private constant DECIMAL_FACTOR = 10 ** 18;
     uint256 private constant SIZE_OF_ALLOCATIONS = 10;
 
@@ -32,6 +32,7 @@ contract FasttokenDistribution is AccessControl {
     bytes32 public constant TOKEN_SALE_DISTRIBUTOR_ROLE = keccak256('TOKEN_SALE_DISTRIBUTOR_ROLE');
     bytes32 public constant MARKETING_PR_DISTRIBUTOR_ROLE = keccak256('MARKETING_PR_DISTRIBUTOR_ROLE');
     bytes32 public constant ECOSYSTEM_DISTRIBUTOR_ROLE = keccak256('ECOSYSTEM_DISTRIBUTOR_ROLE');
+    bytes32 public constant BLOCKCHAIN_BURN_ROLE = keccak256('BLOCKCHAIN_BURN_ROLE');
 
     /// Public variables
     Fasttoken public fasttoken;
@@ -87,6 +88,7 @@ contract FasttokenDistribution is AccessControl {
     event NewAllocation(address indexed recipient, AllocationType indexed allocationType, uint256 amount);
     event TokenClaimed(address indexed recipient, AllocationType indexed allocationType, uint256 amountClaimed);
     event CancelAllocation(address indexed recipient);
+    event BurnAllocation(AllocationType indexed allocationType, uint256 amount);
 
 
     /// Constructor
@@ -103,6 +105,7 @@ contract FasttokenDistribution is AccessControl {
 
         require(address(0x0) != recipient_, 'Recipient address cannot be 0x0');
         require(0 < amount_, 'Allocated amount must be greater than 0');
+        //require(AllocationType.Blockchain != allocationType_, 'Cannot set allocation for blockchain type');
         _checkRole(_msgSender(), allocationType_);
         Allocation storage a = _allocations[recipient_];
         require(AllocationState.Allocated != a.state, 'Recipient already has allocation');
@@ -116,6 +119,25 @@ contract FasttokenDistribution is AccessControl {
         _allocationTypes[uint256(allocationType_)].availableAmount -= amount_;
         availableAmount -= amount_;
         emit NewAllocation(recipient_, allocationType_, amount_);
+    }
+
+    /// Sets allocation for the given recipient with corresponding amount.
+    function burn(AllocationType allocationType_) public {
+
+        require(AllocationType.Presale == allocationType_
+                || AllocationType.Private1 == allocationType_
+                || AllocationType.Private2 == allocationType_
+                || AllocationType.Public == allocationType_
+                || AllocationType.Blockchain == allocationType_,
+                'Burnable only Presale, Private1, Private2, Public, Blockchain allocations');
+        _checkRole(_msgSender(), allocationType_);
+        uint256 i = uint256(allocationType_);
+        if (0 != _allocationTypes[i].availableAmount) {
+            fasttoken.burn(_allocationTypes[i].availableAmount);
+            availableAmount -= _allocationTypes[i].availableAmount;
+            emit BurnAllocation(allocationType_, _allocationTypes[i].availableAmount);
+            _allocationTypes[i].availableAmount = 0;
+        }
     }
 
     /// Cancels allocation for the given recipient
@@ -146,7 +168,7 @@ contract FasttokenDistribution is AccessControl {
                 newPercentage = 100;
             } else {
                 uint256 n = at.vesting / MONTH; // at.vesting % MONTH == 0
-                newPercentage += ((block.timestamp - (a.allocationTime + at.lockupPeriod)) / MONTH) * 100 / n;
+                newPercentage = (((block.timestamp - (a.allocationTime + at.lockupPeriod)) / MONTH) * 100) / n;
             }
         }
         uint256 newAmountClaimed = a.amount;
@@ -285,21 +307,21 @@ contract FasttokenDistribution is AccessControl {
     function _checkRole(address sender_, AllocationType allocationType_) view private {
 
         if (AllocationType.Founders == allocationType_) {
-            require(hasRole(FOUNDERS_DISTRIBUTOR_ROLE, sender_), 'Must have founders distribution role to allocate');
+            require(hasRole(FOUNDERS_DISTRIBUTOR_ROLE, sender_), 'Must have founders distribution role');
         } else if (AllocationType.Advisors == allocationType_) {
-            require(hasRole(ADVISORS_DISTRIBUTOR_ROLE, sender_), 'Must have advisors distribution role to allocate');
+            require(hasRole(ADVISORS_DISTRIBUTOR_ROLE, sender_), 'Must have advisors distribution role');
         } else if (AllocationType.Private1 == allocationType_
                         || AllocationType.Private2 == allocationType_
                         || AllocationType.Public == allocationType_
                         || AllocationType.Presale == allocationType_) {
-            require(hasRole(TOKEN_SALE_DISTRIBUTOR_ROLE, sender_), 'Must have token sale distribution role to allocate');
+            require(hasRole(TOKEN_SALE_DISTRIBUTOR_ROLE, sender_), 'Must have token sale distribution role');
         } else if (AllocationType.Marketing == allocationType_
                         || AllocationType.Partners == allocationType_) {
-            require(hasRole(MARKETING_PR_DISTRIBUTOR_ROLE, sender_), 'Must have marketing and pr distribution role to allocate');
+            require(hasRole(MARKETING_PR_DISTRIBUTOR_ROLE, sender_), 'Must have marketing and pr distribution role');
         } else if (AllocationType.Ecosystem == allocationType_) {
-            require(hasRole(ECOSYSTEM_DISTRIBUTOR_ROLE, sender_), 'Must have ecosystem distribution role to allocate');
+            require(hasRole(ECOSYSTEM_DISTRIBUTOR_ROLE, sender_), 'Must have ecosystem distribution role');
         } else if (AllocationType.Blockchain == allocationType_) {
-            require(false, 'There is no role for blockchain');
+            require(hasRole(BLOCKCHAIN_BURN_ROLE, sender_), 'Must have blockchain burn role to burn Blockchain tokens');
         } else {
             require(false, 'Unsupported allocation type');
         }
