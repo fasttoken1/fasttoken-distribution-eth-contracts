@@ -1,7 +1,7 @@
 
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.0;
+pragma solidity 0.8.16;
 
 
 /// Openzeppelin imports
@@ -18,6 +18,7 @@ contract MultiSigWallet {
     address[] public owners;
     mapping(address => bool) public isOwner;
     uint256 public numberOfRequiredConfirmations;
+    uint256 public confirmationDuration;
 
     // mapping from transaction index => owner index => bool
     mapping(uint256 => mapping(uint256 => bool)) public isConfirmed;
@@ -37,6 +38,7 @@ contract MultiSigWallet {
         uint256 amount;
         bool executed;
         uint256 numberOfConfirmations;
+        uint256 lastConfirmationTime;
     }
 
     modifier onlyOwner() {
@@ -60,10 +62,10 @@ contract MultiSigWallet {
         _;
     }
 
-    constructor(address[] memory _owners, uint256 _numberOfRequiredConfirmations) {
+    constructor(address[] memory _owners, uint256 _numberOfRequiredConfirmations, uint256 _confirmationDuration) {
 
-        require(_owners.length > 0, 'owners required');
-        require(_numberOfRequiredConfirmations > 0 && _numberOfRequiredConfirmations <= _owners.length,
+        require(_owners.length > 1, 'owners required');
+        require(_numberOfRequiredConfirmations > 1 && _numberOfRequiredConfirmations <= _owners.length,
                 'invalid number of required confirmations');
 
         for (uint256 i = 0; i < _owners.length; i++) {
@@ -77,6 +79,7 @@ contract MultiSigWallet {
         }
 
         numberOfRequiredConfirmations = _numberOfRequiredConfirmations;
+        confirmationDuration = _confirmationDuration;
     }
 
     function submitTransaction(
@@ -93,7 +96,7 @@ contract MultiSigWallet {
             require(! isOwner[_address2], 'address2 is already owner');
         }
         uint256 txIndex = transactions.length;
-        transactions.push(Transaction(_type, _address1, _address2, _value, false, 0));
+        transactions.push(Transaction(_type, _address1, _address2, _value, false, 0, 0));
 
         emit SubmitTransaction(txIndex);
     }
@@ -107,6 +110,9 @@ contract MultiSigWallet {
 
         Transaction storage transaction = transactions[_txIndex];
         transaction.numberOfConfirmations += 1;
+        if (transaction.numberOfConfirmations == numberOfRequiredConfirmations) {
+            transaction.lastConfirmationTime = block.timestamp;
+        }
         uint256 index = _ownerIndex(msg.sender);
         isConfirmed[_txIndex][index] = true;
 
@@ -121,10 +127,12 @@ contract MultiSigWallet {
 
         Transaction storage transaction = transactions[_txIndex];
         require(transaction.numberOfConfirmations >= numberOfRequiredConfirmations, 'cannot execute transaction');
+        require(block.timestamp - transaction.lastConfirmationTime > confirmationDuration,
+                'the transaction is still being confirmed');
         transaction.executed = true;
         if (TransactionType.ChangeOwner == transaction.transactionType) {
-            require(! isOwner[transaction.address1], 'address1 must be owner');
-            require(isOwner[transaction.address2], 'address2 cannot be owner');
+            require(isOwner[transaction.address1], 'address1 must be owner');
+            require(! isOwner[transaction.address2], 'address2 cannot be owner');
             uint256 index = _ownerIndex(transaction.address1);
             owners[index] = transaction.address2;
             isOwner[transaction.address1] = false;

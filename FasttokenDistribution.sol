@@ -1,7 +1,7 @@
 
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.0;
+pragma solidity 0.8.16;
 
 
 /// Openzeppelin imports
@@ -197,7 +197,8 @@ contract FasttokenDistribution is AccessControl {
     function refund(address payable recipientAddress_) external payable {
 
         require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), 'Must have admin role to refund');
-        recipientAddress_.transfer(address(this).balance);
+        (bool success, ) = recipientAddress_.call{value: address(this).balance}('');
+        require(success, "Failed to send Ether");
     }
 
     /// Gets array of allocated addresses array
