@@ -39,6 +39,7 @@ contract CustomAllocations is AccessControl {
         uint256 lockupPeriod;                   // Lockup period
         uint256 vesting;                        // Vesting
         AllocationState state;                  // Allocation state
+        bool cancelation;                       // Cancelation
     }
 
 
@@ -56,7 +57,11 @@ contract CustomAllocations is AccessControl {
     }
 
     /// Sets allocation for the given recipient with corresponding amount.
-    function setAllocation(address recipient_, uint256 amount_, uint256 lockupPeriod_, uint256 vesting_) public {
+    function setAllocation(address recipient_,
+                           uint256 amount_,
+                           uint256 lockupPeriod_,
+                           uint256 vesting_,
+                           bool cancelation_) public {
 
         require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), 'Must have admin role to allocate');
         require(address(0x0) != recipient_, 'Recipient address cannot be 0x0');
@@ -74,6 +79,7 @@ contract CustomAllocations is AccessControl {
         a.vesting = vesting_;
         a.amount = amount_;
         a.state = AllocationState.Allocated;
+        a.cancelation = cancelation_;
         allocatedAmount += amount_;
         emit NewAllocation(recipient_, amount_, lockupPeriod_, vesting_);
     }
@@ -83,6 +89,7 @@ contract CustomAllocations is AccessControl {
 
         require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), 'Must have admin role to cancel allocation');
         Allocation storage a = _allocations[allocatedAddress_];
+        require(a.cancelation, 'Allocation cannot be canceled');
         require(AllocationState.Allocated == a.state, 'There is no allocation');
         require(0 == a.amountClaimed, 'Cannot cancel allocation with claimed tokens');
         a.state = AllocationState.Canceled;
@@ -153,7 +160,8 @@ contract CustomAllocations is AccessControl {
                 uint256 vesting,
                 uint256 amount,
                 uint256 amountClaimed,
-                AllocationState state) {
+                AllocationState state,
+                bool cancelation) {
 
         allocationTime = _allocations[address_].allocationTime;
         lockupPeriod = _allocations[address_].lockupPeriod;
@@ -161,5 +169,6 @@ contract CustomAllocations is AccessControl {
         amount = _allocations[address_].amount;
         amountClaimed = _allocations[address_].amountClaimed;
         state = _allocations[address_].state;
+        cancelation = _allocations[address_].cancelation;
     }
 }
