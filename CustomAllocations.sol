@@ -14,6 +14,9 @@ contract CustomAllocations is AccessControl {
     /// Constant private member variables
     uint256 private constant MONTH = 30 days;
 
+    /// Constant public member variables
+    uint256 public constant CANCELATION_PERIOD = 1 days;
+
     /// Public variables
     address public tokenAddress;
     uint256 public allocatedAmount = 0;
@@ -89,7 +92,7 @@ contract CustomAllocations is AccessControl {
 
         require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), 'Must have admin role to cancel allocation');
         Allocation storage a = _allocations[allocatedAddress_];
-        require(a.cancelation, 'Allocation cannot be canceled');
+        require(block.timestamp < a.allocationTime + CANCELATION_PERIOD || a.cancelation, 'Allocation cannot be canceled');
         require(AllocationState.Allocated == a.state, 'There is no allocation');
         require(0 == a.amountClaimed, 'Cannot cancel allocation with claimed tokens');
         a.state = AllocationState.Canceled;
