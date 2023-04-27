@@ -1,7 +1,7 @@
 
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.16;
+pragma solidity ^0.8.17;
 
 
 /// Openzeppelin imports
@@ -24,6 +24,8 @@ contract FTNVault is Ownable {
     // Define the mapping to store miter limits
     mapping(address => uint256) public limits;
 
+    // Indicates contract initialization
+    bool public initialized;
 
     // Define the event that will be emitted when a new burn transaction is processed
     event BurnTransactionProcessed(bytes32 indexed burnTxHash, address indexed recipient, uint256 amount);
@@ -32,19 +34,28 @@ contract FTNVault is Ownable {
     event LimitUpdated(address indexed minterAddress, uint256 amount);
 
 
-    // Define the constructor to initialize the Vault contract
+    // Define the constructor to empty
     constructor() {
 
-        _transferOwnership(0xEd79b1F69fB60a0FA2262ccd3F7D5FEb659016b7);
+    }
 
-        bytes32 burnTxHash = 0x2ef492d25294e562c50dab1c60e0ebd2aa522d89ee9302eb27f0889f0b0fb80b;
-        uint256 amount = 10000 * 10**18;
-        _processBurnTransaction(burnTxHash, msg.sender, amount);
+    // Define the function which will initialize the FTNVault contract instead of constructor
+    function initialize(bytes32 burnTxHash_) public {
+
+        require(!initialized, 'Contract has already been initialized');
+        initialized = true;
+
+        _transferOwnership(msg.sender);
+        burnTransactionHashes[burnTxHash_] = true;
+
+        uint256 amount = 1000 * 10**18;
+        emit BurnTransactionProcessed(burnTxHash_, msg.sender, amount);
     }
 
     // Updates minting limit of minter address
     function updateLimit(address minterAddress_, uint256 limit_) external onlyOwner {
 
+        require(initialized, 'Contract has not been initialized');
         limits[minterAddress_] = limit_;
         emit LimitUpdated(minterAddress_, limit_);
     }
@@ -52,7 +63,8 @@ contract FTNVault is Ownable {
     // Define the function to store the Ethereum burn transaction hash and transfer native tokens (FTN)
     function processBurnTransaction(bytes32 burnTxHash_, address recipient_, uint256 amount_) external {
 
-        require(amount_ < limits[msg.sender], 'Limit exceeded');
+        require(initialized, 'Contract has not been initialized');
+        require(amount_ <= limits[msg.sender], 'Limit exceeded');
         limits[msg.sender] -= amount_;
         _processBurnTransaction(burnTxHash_, recipient_, amount_);
     }
