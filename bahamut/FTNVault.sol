@@ -64,6 +64,7 @@ contract FTNVault is Ownable {
     function processBurnTransaction(bytes32 burnTxHash_, address recipient_, uint256 amount_) external {
 
         require(initialized, 'Contract has not been initialized');
+        require(0 < amount_, 'amount cannot be null');
         require(amount_ <= limits[msg.sender], 'Limit exceeded');
         limits[msg.sender] -= amount_;
         _processBurnTransaction(burnTxHash_, recipient_, amount_);
